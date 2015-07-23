@@ -20,33 +20,42 @@ class Site {
    * Needs site object from the api to instantiate
    * @param $site (object) required - api site object
    */
-  public function __construct($attributes = null) {
-    if (!attributes) {
-      $attributes = new \stdClass();
-    } elseif (is_string($attributes)) {
-      $this->id = $attributes;
-      $attributes = new \stdClass();
-    } else {
-      $this->id = $attributes->id;
-    }
+  public function __construct($site) {
+    $this->id = $site->id;
+    $this->information = $site->information;
 
-    if ($attributes->information) {
-      # If the attributes has information, we want to unwrap it
-      # and massage the data into proper format
-      $this->attributes = $attributes->information;
-      $this->attributes->id = $attributes->id;
-    } else {
-      $this->attributes = $attributes;
-    }
-
-    # deprecated properties
-    # this->information is deprecated, use $this->attributes
-    $this->information = $this->attributes;
-    // cosmetic reasons for this
-    $this->metadata = @$this->attributes->metadata ?: new \stdClass();
-    # /deprecated properties
+     // cosmetic reasons for this
+    $this->information->id = $this->id;
+    $this->metadata = @$site->metadata ?: new \stdClass();
 
     return $this;
+
+    // if (!attributes) {
+    //   $attributes = new \stdClass();
+    // } elseif (is_string($attributes)) {
+    //   $this->id = $attributes;
+    //   $attributes = new \stdClass();
+    // } else {
+    //   $this->id = $attributes->id;
+    // }
+    //
+    // if ($attributes->information) {
+    //   # If the attributes has information, we want to unwrap it
+    //   # and massage the data into proper format
+    //   $this->attributes = $attributes->information;
+    //   $this->attributes->id = $attributes->id;
+    // } else {
+    //   $this->attributes = $attributes;
+    // }
+    //
+    // # deprecated properties
+    // # this->information is deprecated, use $this->attributes
+    // $this->information = $this->attributes;
+    // // cosmetic reasons for this
+    // $this->metadata = @$this->attributes->metadata ?: new \stdClass();
+    // # /deprecated properties
+    //
+    // return $this;
   }
 
   public static function createFromName($sitename) {
