@@ -109,6 +109,109 @@ abstract class Terminus_Command {
 
   }
 
+  /**
+   * Make a request to the Dashbord's internal API.
+   *
+   * @param $path
+   *    API path
+   *
+   * @param $options
+   *   @param method: GET is default
+   *   @param data:  A native PHP data structure (int, string, arary or simple object) to be
+   *   sent along with the request. Will be encoded as JSON for you.
+   *
+   *
+   */
+  public static function paged_request($path, $options = array()) {
+    $limit = isset($options['limit']) ? $options['limit'] : 100;
+
+    # results is an associative array so we don't refetch
+    $results = array();
+    $finished = false;
+    $start = NULL;
+
+    while (!$finished) {
+      $paged_path = $path;
+      $paged_path .= '?limit=' . $limit;
+      if ($start) {
+        $paged_path .= '&start=' . $start;
+      }
+
+      $resp = self::simple_request($paged_path);
+
+      $data = $resp['data'];
+      if (count($data) > 0) {
+        $start = end($data)->id;
+
+        # if the last item of the results has previously been received
+        # that means there are no more pages to fetch
+        if (isset($results[$start])) {
+          $finished = true;
+          continue;
+        }
+
+        foreach ($data as $item) {
+          $results[$item->id] = $item;
+        }
+      } else {
+        $finished = true;
+      }
+    }
+
+    return array(
+      'data' => array_values($results)
+    );
+  }
+
+  /**
+   * Simplified request method for Pantheon API.
+   *
+   * @param $path
+   *    API path
+   *
+   * @param $options
+   *   @param method: GET is default
+   *   @param data:  A native PHP data structure (int, string, arary or simple object) to be
+   *   sent along with the request. Will be encoded as JSON for you.
+   *
+   */
+  public static function simple_request($path, $options = array()) {
+    $req_options = array();
+
+    $method = 'get';
+    if (isset($options['method'])) {
+      $method = $options['method'];
+    }
+
+    if (isset($options['data'])) {
+      $req_options['body'] = json_encode($options['data']);
+      $req_options['headers'] = array('Content-type' => 'application/json');
+    }
+
+    $url = 'https://' . TERMINUS_HOST . '/api/' . $path;
+
+    if (Session::getValue('session')) {
+      $req_options['cookies'] = array('X-Pantheon-Session' => Session::getValue('session'));
+      $req_options['verify'] = false;
+    }
+
+    try {
+      $resp = Request::send($url, $method, $req_options);
+    } catch( Guzzle\Http\Exception\BadResponseException $e ) {
+      \Terminus::error("Request Failure: %s", $e->getMessage());
+      return;
+    }
+
+    $json = $resp->getBody(TRUE);
+    return array(
+      'info' => $resp->getInfo(),
+      'headers' => $resp->getRawHeaders(),
+      'json' => $json,
+      'data' => json_decode($json),
+      'status_code' => $resp->getStatusCode()
+    );
+  }
+
   public static function download($url, $target) {
     try {
       $response = Request::download($url,$target);

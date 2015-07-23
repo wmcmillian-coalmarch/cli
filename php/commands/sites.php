@@ -6,6 +6,7 @@
 use Terminus\Utils;
 use Terminus\Products;
 use Terminus\Session;
+use Terminus\SitesCache;
 use Terminus\SiteFactory;
 use Terminus\Auth;
 use Terminus\Helpers\Input;
@@ -23,6 +24,34 @@ class Sites_Command extends Terminus_Command {
   public function __construct() {
     parent::__construct();
     Auth::loggedIn();
+  }
+
+  /**
+   * List Sites in Cache
+   *
+   * ## OPTIONS
+   *
+   * [--rebuild]
+   * @subcommand cache
+   */
+  public function cache($args, $assoc_args) {
+    $sites_cache = new Terminus\SitesCache();
+
+    if (isset($assoc_args['rebuild'])) {
+      $sites_cache->rebuild();
+    }
+
+    $sites = $sites_cache->all();
+
+    $data = array();
+    foreach ($sites as $name => $id) {
+      $data[] = array(
+        'name' => $name,
+        'id' => $id
+      );
+    }
+
+    $this->handleDisplay($data);
   }
 
   /**
