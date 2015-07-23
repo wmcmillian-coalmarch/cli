@@ -43,8 +43,11 @@ class SiteTest extends PHPUnit_Framework_TestCase {
    $site = SiteFactory::instance('phpunittest');
    $data = $site->info();
    $this->assertNotEmpty($data);
-   $this->assertInternalType('array', $data);
-   $this->assertArrayHasKey('name', $data);
+
+   $this->assertInstanceOf('stdClass', $data);
+   $this->assertObjectHasAttribute('name', $data);
+   //  $this->assertInternalType('array', $data);
+   //  $this->assertArrayHasKey('name', $data);
  }
 
  /**

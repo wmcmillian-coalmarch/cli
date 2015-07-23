@@ -157,27 +157,36 @@ class Site {
    * Load site info
    */
   public function info($key = null) {
-    $info = array(
-      'id' => $this->id,
-      'name' => $this->information->name,
-      'label' => $this->information->label,
-      'created' => $this->information->created,
-      'framework' => $this->information->framework,
-      'organization' => $this->information->organization,
-      'service_level' => $this->information->service_level,
-      'upstream' => (array) $this->information->upstream,
-      'php_version' => $this->information->php_version,
-      'holder_type' =>  $this->information->holder_type,
-      'holder_id' => $this->information->holder_id,
-      'owner' => $this->information->owner,
-    );
+    $info = $this->information;
 
     if ($key) {
+      return property_exists($info, $key) ? $info->$key : null;
       return isset($info[$key]) ? $info[$key] : null;
-    }
-    else {
+    } else {
       return $info;
     }
+    //
+    // $info = array(
+    //   'id' => $this->id,
+    //   'name' => $this->information->name,
+    //   'label' => $this->information->label,
+    //   'created' => $this->information->created,
+    //   'framework' => $this->information->framework,
+    //   'organization' => $this->information->organization,
+    //   'service_level' => $this->information->service_level,
+    //   'upstream' => (array) $this->information->upstream,
+    //   'php_version' => $this->information->php_version,
+    //   'holder_type' =>  $this->information->holder_type,
+    //   'holder_id' => $this->information->holder_id,
+    //   'owner' => $this->information->owner,
+    // );
+    //
+    // if ($key) {
+    //   return isset($info[$key]) ? $info[$key] : null;
+    // }
+    // else {
+    //   return $info;
+    // }
   }
 
   /**
