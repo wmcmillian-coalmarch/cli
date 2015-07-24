@@ -30,7 +30,7 @@ class Site {
     //
     // return $this;
 
-    if (!attributes) {
+    if (!$attributes) {
       $attributes = new \stdClass();
     } elseif (is_string($attributes)) {
       $this->id = $attributes;
