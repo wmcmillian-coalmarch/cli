@@ -1283,57 +1283,50 @@ class Site_Command extends Terminus_Command {
    * ## OPTIONS
    *
    * [--site=<site>]
-   * : Site to check
+   * : Site to check for updates
    *
    * [--update=<env>]
-   * : Do update on dev env
+   * : Environment to update ("dev" or Multidev environment )
    *
    * @alias upstream-updates
   **/
-   public function upstream_updates($args, $assoc_args) {
-     $site = SiteFactory::instance(Input::site($assoc_args));
-     $upstream = $site->getUpstreamUpdates();
+  public function upstream_updates($args, $assoc_args) {
+    $site = SiteFactory::instance(Input::site($assoc_args));
+    $upstream = $site->getUpstreamUpdates();
 
-     // data munging as usual
-     $data = array();
+    $data = array();
+    if(isset($upstream->remote_url) && isset($upstream->behind)) {
+      // The $upstream object returns a value of [behind] -> 1 if there is an
+      // upstream update that has not been applied to Dev.
+      $data[$upstream->remote_url] = ($upstream->behind > 0 ? "Updates Available":"Up-to-date");
 
-     if(isset($upstream->remote_url) && isset($upstream->behind)) {
-       // The $upstream object returns a value of [behind] -> 1 if there is an
-       // upstream update that has not been applied to Dev.
-       $data[$upstream->remote_url] = ($upstream->behind > 0 ? "Updates Available":"Up-to-date");
-
-       $this->_constructTableForResponse($data, array('Upstream','Status') );
-       if (!isset($upstream) OR empty($upstream->update_log)) Terminus::success("No updates to show");
-       $upstreams = (array) $upstream->update_log;
-       if (!empty($upstreams)) {
-         $data = array();
-         foreach ($upstreams as $commit) {
-           $data = array(
-             'hash' => $commit->hash,
-             'datetime'=> $commit->datetime,
-             'message' => $commit->message,
-             'author' => $commit->author,
-           );
-           $this->handleDisplay($data,$args);
-           echo PHP_EOL;
-         }
-       }
-     } else {
-       $this->handleDisplay('There was a problem checking your upstream status. Please try again.');
-       echo PHP_EOL;
-     }
-     if (isset($assoc_args['update']) AND !empty($upstream->update_log)) {
-       $env = 'dev';
-       Terminus::confirm(sprintf("Are you sure you want to apply the upstream updates to %s-dev", $site->getName(), $env));
-       $response = $site->applyUpstreamUpdates($env);
-       if (@$response->id) {
-         $this->waitOnWorkflow('sites', $site->getId(), $response->id);
-       } else {
-         Terminus::success("Updates applied");
-       }
-     }
-
-   }
+      $this->_constructTableForResponse($data, array('Upstream','Status') );
+      if (!isset($upstream) OR empty($upstream->update_log)) Terminus::success("No updates to show");
+      $upstreams = (array) $upstream->update_log;
+      if (!empty($upstreams)) {
+        $data = array();
+        foreach ($upstreams as $commit) {
+          $data = array(
+            'hash' => $commit->hash,
+            'datetime'=> $commit->datetime,
+            'message' => $commit->message,
+            'author' => $commit->author,
+          );
+          $this->handleDisplay($data,$args);
+          echo PHP_EOL;
+        }
+      }
+    } else {
+      $this->handleDisplay('There was a problem checking your upstream status. Please try again.');
+      echo PHP_EOL;
+    }
+    if (isset($assoc_args['update']) AND !empty($upstream->update_log)) {
+      $env = 'dev';
+      $workflow = $site->applyUpstreamUpdates($env);
+      $workflow->wait();
+      Terminus::success("Updates applied");
+    }
+  }
 
   /**
    * Pings a site to ensure it responds
@@ -1368,7 +1361,7 @@ class Site_Command extends Terminus_Command {
   }
 
   /**
-   * Complete wipe and reset a site
+   * Complete wipe content (files/database) for an environment
    *
    * ## OPTIONS
    *
@@ -1376,25 +1369,16 @@ class Site_Command extends Terminus_Command {
    * : Site to use
    *
    * [--env=<env>]
-   * : Specify environment, default = dev
+   * : Environment to be wiped
    */
    public function wipe($args, $assoc_args) {
-     try {
-       $env = @$assoc_args['env'] ?: 'dev';
-       $site = SiteFactory::instance(Input::site($assoc_args));
-       $site_id = $site->getId();
-       $env = Input::env($assoc_args, 'env');
-       Terminus::line("Wiping %s %s", array($site_id, $env));
-       $resp = $site->environment($env)->wipe();
-       if ($resp) {
-         $this->waitOnWorkflow('sites', $site_id, $resp['data']->id);
-         Terminus::success("Successfully wiped %s -- %s", array($site->getName(),$env));
-       }
-    } catch(Exception $e) {
-      Terminus::error("%s",array($e->getMessage()));
-    }
-   }
+     $site = SiteFactory::instance(Input::site($assoc_args));
+     $env_id = Input::env($assoc_args, 'env');
 
+     $workflow = $site->environment($env_id)->wipe();
+     $workflow->wait();
+     Terminus::success("Successfully wiped %s -- %s", array($site->getName(), $env_id));
+   }
 }
 
 \Terminus::add_command( 'site', 'Site_Command' );

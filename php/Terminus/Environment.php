@@ -44,9 +44,13 @@ class Environment {
     }
   }
 
+  /**
+   *
+   *
+   */
   public function wipe() {
-    $path = sprintf("environments/%s/wipe", $this->name);
-    return \Terminus_Command::request('sites', $this->site->getId(), $path, 'POST');
+    $workflow = $this->site->workflows->create('wipe', array('environment' => $this->id));
+    return $workflow;
   }
 
   public function diffstat() {

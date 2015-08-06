@@ -219,10 +219,14 @@ class Site {
    * @todo This currently doesn't work and is block upstream
    */
   public function applyUpstreamUpdates($env, $updatedb = true, $xoption = 'theirs') {
-    $data = array('updatedb' => $updatedb, 'xoption' => $xoption );
-    $options = array( 'body' => json_encode($data) , 'headers'=>array('Content-type'=>'application/json') );
-    $response = \Terminus_Command::request('sites', $this->getId(), 'code-upstream-updates', 'POST', $options);
-    return $response['data'];
+    $workflow = $this->workflows->create('apply_upstream_updates', array(
+      'environment' => $env,
+      'params' => array(
+        'updatedb' => $updatedb,
+        'xoption' => $xoption
+      )
+    ));
+    return $workflow;
   }
 
   /**
