@@ -55,10 +55,14 @@ abstract class Terminus_Command {
       $cache = Terminus::get_cache();
 
       if (!in_array($realm,array('login','user'))) {
-        $options['cookies'] = array('X-Pantheon-Session' => Session::getValue('session'));
+        if (Session::getValue('token_type') == 'X-Pantheon-Session') {
+          $options['cookies'] = array('X-Pantheon-Session' => Session::getValue('session'));
+        }
+        if (Session::getValue('token_type') == 'Bearer') {
+          $options['headers']['Bearer'] = Session::getValue('id_token');
+        }
         $options['verify'] = false;
       }
-
       $url = Endpoint::get(array('realm'=>$realm, 'uuid'=>$uuid, 'path'=>$path));
       if (Terminus::get_config('debug')) {
         Logger::debug('Request URL: '.$url);
