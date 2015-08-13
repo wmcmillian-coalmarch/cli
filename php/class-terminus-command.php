@@ -52,18 +52,15 @@ abstract class Terminus_Command {
     }
 
     try {
-      $cache = Terminus::get_cache();
+      if (!in_array($realm,array('login'))) {
 
-      if (!in_array($realm,array('login','user'))) {
-        // @TODO: to avoid having to modify Hermes we send the JWT as a session cookie.
-//        if (Session::getValue('token_type') == 'X-Pantheon-Session') {
-//          $options['cookies'] = array('X-Pantheon-Session' => Session::getValue('session'));
-//        }
-//        if (Session::getValue('token_type') == 'Bearer') {
-//          $options['headers']['Bearer'] = Session::getValue('id_token');
-//        }
-
-        $options['cookies'] = array('X-Pantheon-Session' => Session::getValue('session'));
+        // If a token wasn't passed in, then get the saved one.
+        if (!isset($options['auth_token'])) {
+          $options['auth_token'] = Auth::getAuthToken();
+        }
+        // To avoid having to modify Hermes we send the JWT as a session cookie.
+        // @TODO: Alter or bypass hermes so we can use a standard 'Bearer' header for this token.
+        $options['cookies'] = array('X-Pantheon-Session' => $options['auth_token']);
 
         $options['verify'] = false;
       }

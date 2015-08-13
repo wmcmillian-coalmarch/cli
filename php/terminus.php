@@ -31,6 +31,10 @@ if(isset($_SERVER['TERMINUS_HOST']) && $_SERVER['TERMINUS_HOST'] != '')  {
 
 define('TERMINUS_PORT', '443');
 
+define('TERMINUS_AUTH0_DOMAIN', 'nodesquirrel.auth0.com');
+define('TERMINUS_AUTH0_CLIENT_ID', 'cTvdf4b1fAdaYRyMM5U2cCZx1Pkm74xl');
+define('TERMINUS_AUTH0_CALLBACK', 'http://localhost/auth0-callback/');
+
 if(isset($_SERVER['VCR_CASSETTE'])) {
   \VCR\VCR::configure()->enableRequestMatchers(array('method', 'url', 'body'));
   \VCR\VCR::configure()->setMode($_SERVER['VCR_MODE']);
