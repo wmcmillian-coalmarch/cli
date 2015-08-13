@@ -214,9 +214,7 @@ class Auth_Command extends Terminus_Command {
     $default = 'Terminus CLI';
     $device = Terminus::prompt("What would you like to name this instance of Terminus? (default: '$default')", NULL, $default);
 
-    // @TODO: Abstract this to a redirect
-    $url = 'https://' . TERMINUS_AUTH0_DOMAIN . '/authorize?response_type=token&client_id='
-      . TERMINUS_AUTH0_CLIENT_ID . '&redirect_uri=' . TERMINUS_AUTH0_CALLBACK . '&device=' . urlencode($device) . '&scope=openid+offline_access+uuid';
+    $url = TERMINUS_AUTH0_START_URL . '?device=' . urlencode($device);
 
     Terminus::line("To log in please visit the following url in a web browser:");
     Terminus::line($url);

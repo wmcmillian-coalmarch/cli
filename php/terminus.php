@@ -31,9 +31,11 @@ if(isset($_SERVER['TERMINUS_HOST']) && $_SERVER['TERMINUS_HOST'] != '')  {
 
 define('TERMINUS_PORT', '443');
 
-define('TERMINUS_AUTH0_DOMAIN', 'nodesquirrel.auth0.com');
-define('TERMINUS_AUTH0_CLIENT_ID', 'cTvdf4b1fAdaYRyMM5U2cCZx1Pkm74xl');
-define('TERMINUS_AUTH0_CALLBACK', 'http://localhost/auth0-callback/');
+// Temporary demo endpoints for negotiating connections to Auth0 (and hiding some of the implementation details).
+define('TERMINUS_AUTH0_CALLBACK', 'https://dev-terminus-auth0.pantheon.io/auth/callback.php');
+define('TERMINUS_AUTH0_START_URL', 'https://dev-terminus-auth0.pantheon.io/auth/start.php');
+define('TERMINUS_AUTH0_REFRESH_URL', 'https://dev-terminus-auth0.pantheon.io/auth/refresh.php');
+
 
 if(isset($_SERVER['VCR_CASSETTE'])) {
   \VCR\VCR::configure()->enableRequestMatchers(array('method', 'url', 'body'));

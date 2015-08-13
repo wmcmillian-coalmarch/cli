@@ -125,25 +125,13 @@ class Auth {
     }
 
     // Assemble the parameters needed to request a JWT access token.
-    $url = 'https://' . TERMINUS_AUTH0_DOMAIN . '/delegation';
-    $body = array(
-      'client_id' => TERMINUS_AUTH0_CLIENT_ID,
-      'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-      'refresh_token' => $refresh_token,
-      'target' => TERMINUS_AUTH0_CLIENT_ID,
-      'scope' => 'openid email pnth_uid',
-      'api_type' => 'app',
-    );
-
-    // Retrieve a JWT token from the authentication server.
     $options = array(
-      'json' => true,
-      'body' => json_encode($body),
-      'headers' => array(
-        'Content-Type' => 'application/json'
+      'postdata' => array(
+        'refresh_token' => $refresh_token
       )
     );
-    $resp = Request::send($url, 'POST', $options);
+    $resp = Request::send(TERMINUS_AUTH0_REFRESH_URL, 'POST', $options);
+
     $json = $resp->getBody(true);
     if ($info = json_decode($json)) {
       if (isset($info->id_token)) {
@@ -152,7 +140,7 @@ class Auth {
     }
 
     // @TODO: Offer a remedy in this error message
-    \Terminus::error("[auth_error]: The saved refresh token is invalid.");
+    \Terminus::error("[auth_error]: The saved refresh token is invalid. Try generating another one with `terminus auth login`");
     return null;
   }
 
