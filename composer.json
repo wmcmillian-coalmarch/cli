@@ -19,10 +19,7 @@
     "symfony/css-selector": "2.7",
     "guzzle/guzzle": "3.9.*@stable",
     "nb/oxymel": "0.1.0",
-    "psy/psysh": "@stable",
-    "auth0/auth0-php": "0.6.*",
-    "adoy/oauth2": "dev-master",
-    "firebase/php-jwt" : "dev-master"
+    "psy/psysh": "@stable"
   },
   "autoload": {
     "psr-0": { "Terminus": "php" },
