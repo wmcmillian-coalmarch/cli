@@ -322,8 +322,8 @@ class Site_Command extends Terminus_Command {
    * [--site=<site>]
    * : Site's name
    *
-   * [--org=<org>]
-   * : Organization name
+   * [--org=<name|id>]
+   * : When adding: by name; when removing: by id
    *
    * [--role=<role>]
    * : Max role for organization on this site ... default "team_member"
@@ -349,8 +349,9 @@ class Site_Command extends Terminus_Command {
           Terminus::success("Organization successfully removed");
           $orgs = $site->memberships();
           break;
-        case 'default':
         case 'list':
+        default:
+
           $orgs = $site->memberships();
           break;
     }
@@ -419,8 +420,18 @@ class Site_Command extends Terminus_Command {
          if (!in_array($element,array('code','files','db'))) {
            Terminus::error("Invalid backup element specified.");
          }
-         $latest = Input::optional('latest',$assoc_args,false);
-         $backups = $site->environment($env)->backups($element, $latest);
+         $latest = Input::optional('latest', $assoc_args, false);
+         $backups = $site->environment($env)->backups($element);
+
+         // Ensure that that backups being presented for getting have finished
+         $backups = array_filter($backups, function($backup) {
+           return (isset($backup->finish_time) && $backup->finish_time);
+         });
+
+         if ($latest) {
+           $backups = array(array_pop($backups));
+         }
+
          if (empty($backups)) {
            \Terminus::error('No backups available.');
          }
@@ -516,24 +527,31 @@ class Site_Command extends Terminus_Command {
         }
         break;
       case 'list':
-      case 'default':
+      default:
         $backups = $site->environment($env)->backups();
-        $element = @$assoc_args['element'];
+        $element_name = isset($assoc_args['element']) && $assoc_args['element'] != 'all' ? $assoc_args['element'] : false;
+        if ($element_name == 'db') {
+          $element_name = 'database';
+        }
+
         $data = array();
         foreach ($backups as $id => $backup) {
           if (!isset($backup->filename)) continue;
+          if ($element_name && !preg_match(sprintf('/backup_%s/', $element_name), $id)) continue;
+
           $date = 'Pending';
           if (isset($backup->finish_time)) {
             $date = date("Y-m-d H:i:s", $backup->finish_time);
           }
 
-          $size =  $backup->size / 1024 / 1024;
+          $size = $backup->size / 1024 / 1024;
           if ($size > 0.1) {
             $size = sprintf("%.1fMB", $size);
           } elseif ($size > 0) {
             $size = "0.1MB";
           } else {
-            $size = "0MB";
+            // 0-byte backups should not be recommended for restore
+            $size = "Incomplete";
           }
 
           $data[] = array(
@@ -675,22 +693,33 @@ class Site_Command extends Terminus_Command {
    *
    * @subcommand create-env
    */
-   public function create_env($args, $assoc_args) {
-     $site = SiteFactory::instance(Input::sitename($assoc_args));
+  public function create_env($args, $assoc_args) {
+    $site = SiteFactory::instance(Input::sitename($assoc_args));
 
-     if (isset($assoc_args['env'])) {
-       $env = $assoc_args['env'];
-     } else {
-       $env = Terminus::prompt("Name of new MultiDev environment");
-     }
+    if((boolean)$site->getFeature('multidev')) {
+      if (isset($assoc_args['env'])) {
+        $env = $assoc_args['env'];
+      } else {
+        $env = Terminus::prompt("Name of new MultiDev environment");
+      }
 
-     $site->environmentsCollection->fetch();
-     $src = Input::env($assoc_args, 'from-env', "Environment to clone content from", $site->environmentsCollection->ids());
+      $site->environmentsCollection->fetch();
+      $src = Input::env(
+        $assoc_args,
+        'from-env',
+        'Environment to clone content from',
+        $site->environmentsCollection->ids()
+      );
 
-     $workflow = $site->createEnvironment($env, $src);
-     $workflow->wait();
-     Terminus::success("Created the $env environment");
-   }
+      $workflow = $site->createEnvironment($env, $src);
+      $workflow->wait();
+      Terminus::success("Created the $env environment");
+    } else {
+      Terminus::error(
+        'This site does not have the authority to conduct this operation.'
+      );
+    }
+  }
 
    /**
     * Merge a Multidev Environment into Dev Environment
@@ -793,7 +822,7 @@ class Site_Command extends Terminus_Command {
     * : Clear cache after deploy?
     *
     * [--updatedb]
-    * : (Drupal only) run update.php after deploy?
+    * : (Drupal only) run update.php after deploy
     *
     * [--note=<note>]
     * : deploy log message
@@ -1300,9 +1329,9 @@ class Site_Command extends Terminus_Command {
     if (isset($assoc_args['set'])) {
       $set = $assoc_args['set'];
       $data = $site->updateServiceLevel($set);
-      Logger::coloredOutput("%2<K>Service Level has been updated to '$set'%n");
+      Logger::coloredOutput("%2<K>Service level has been updated to '$set'%n");
     }
-    Logger::coloredOutput("%2<K>Service Level is '$info'%n");
+    Logger::coloredOutput("%2<K>Service level is '$info'%n");
     return true;
   }
 
@@ -1311,7 +1340,7 @@ class Site_Command extends Terminus_Command {
   *
   * ## OPTIONS
   *
-  * <list|add-member|remove-member>
+  * <list|add-member|remove-member|change-role>
   * : i.e. add or remove
   *
   * [--site=<site>]
@@ -1320,36 +1349,59 @@ class Site_Command extends Terminus_Command {
   * [--member=<email>]
   * : Email of the member to add. Member will receive an invite
   *
+  * [--role=<role>]
+  * : Role for the new member to act as
+  *
   * @subcommand team
   */
   public function team($args, $assoc_args) {
     $action = array_shift($args) ?: 'list';
-    $site = SiteFactory::instance(Input::sitename($assoc_args));
-    $data = array();
+    $site   = SiteFactory::instance(Input::sitename($assoc_args));
+    $data   = array();
+    $team   = $site->getSiteUserMemberships();
     switch($action) {
       case 'add-member':
-        $team = $site->teamAddMember($assoc_args['member']);
-        Logger::coloredOutput("%2<K>Team member added!</K>");
+        if((boolean)$site->getFeature('change_management')) {
+          $role = Input::role($assoc_args);
+        } else {
+          $role = 'team_member';
+        }
+        $workflow = $team->add($assoc_args['member'], $role);
+        $this->workflowOutput($workflow);
         break;
       case 'remove-member':
-        $team = $site->teamRemoveMember($assoc_args['member']);
-        Logger::coloredOutput("%2<K>Team member removed!</K>");
+        $user     = $team->findByEmail($assoc_args['member']);
+        $workflow = $user->remove($assoc_args['member']);
+        $this->workflowOutput($workflow);
+        break;
+      case 'change-role':
+        if((boolean)$site->getFeature('change_management')) {
+          $role = Input::role($assoc_args);
+          $user = $team->findByEmail($assoc_args['member']);
+          $workflow = $user->setRole($role);
+          $this->workflowOutput($workflow);
+        } else {
+          Logger::redline(
+            'This site does not have the authority to conduct this operation.'
+          );
+        }
         break;
       case 'list':
       default:
-        $team = $site->team();
-        foreach ($team as $uuid => $user) {
+        $user_memberships = $team->all();
+        foreach($user_memberships as $uuid => $user_membership) {
+          $user = $user_membership->getUser();
           $data[] = array(
-            'First' => $user->user->profile->firstname,
-            'Last'  => $user->user->profile->lastname,
-            'Email' => $user->user->email,
-            'UUID'  => $user->user->id,
+            'First' => $user->profile->firstname,
+            'Last'  => $user->profile->lastname,
+            'Email' => $user->email,
+            'UUID'  => $user->id,
           );
         }
         ksort($data);
         break;
     }
-    if (!empty($data)) {
+    if(!empty($data)) {
       $this->handleDisplay($data);
     }
   }
@@ -1378,55 +1430,55 @@ class Site_Command extends Terminus_Command {
    * [--site=<site>]
    * : Site to check
    *
-   * [--update=<env>]
-   * : Do update on dev env
+   * [--update]
+   * : Apply upstream updates to the Dev Environment
+   *
+   * [--updatedb]
+   * : (Drupal only) run update.php after deploy
    *
    * @alias upstream-updates
   **/
-   public function upstream_updates($args, $assoc_args) {
-     $site = SiteFactory::instance(Input::sitename($assoc_args));
-     $upstream = $site->getUpstreamUpdates();
+  public function upstream_updates($args, $assoc_args) {
+    $site = SiteFactory::instance(Input::sitename($assoc_args));
+    $upstream = $site->getUpstreamUpdates();
 
-     // data munging as usual
-     $data = array();
+    $data = array();
+    if(isset($upstream->remote_url) && isset($upstream->behind)) {
+      // The $upstream object returns a value of [behind] -> 1 if there is an
+      // upstream update that has not been applied to Dev.
+      $data[$upstream->remote_url] = ($upstream->behind > 0 ? "Updates Available":"Up-to-date");
 
-     if(isset($upstream->remote_url) && isset($upstream->behind)) {
-       // The $upstream object returns a value of [behind] -> 1 if there is an
-       // upstream update that has not been applied to Dev.
-       $data[$upstream->remote_url] = ($upstream->behind > 0 ? "Updates Available":"Up-to-date");
+      $this->_constructTableForResponse($data, array('Upstream','Status') );
+      if (!isset($upstream) OR empty($upstream->update_log)) Terminus::success("No updates to show");
+      $upstreams = (array) $upstream->update_log;
+      if (!empty($upstreams)) {
+        $data = array();
+        foreach ($upstreams as $commit) {
+          $data = array(
+            'hash' => $commit->hash,
+            'datetime'=> $commit->datetime,
+            'message' => $commit->message,
+            'author' => $commit->author,
+          );
+          $this->handleDisplay($data,$args);
+          echo PHP_EOL;
+        }
+      }
+    } else {
+      $this->handleDisplay('There was a problem checking your upstream status. Please try again.');
+      echo PHP_EOL;
+    }
 
-       $this->_constructTableForResponse($data, array('Upstream','Status') );
-       if (!isset($upstream) OR empty($upstream->update_log)) Terminus::success("No updates to show");
-       $upstreams = (array) $upstream->update_log;
-       if (!empty($upstreams)) {
-         $data = array();
-         foreach ($upstreams as $commit) {
-           $data = array(
-             'hash' => $commit->hash,
-             'datetime'=> $commit->datetime,
-             'message' => $commit->message,
-             'author' => $commit->author,
-           );
-           $this->handleDisplay($data,$args);
-           echo PHP_EOL;
-         }
-       }
-     } else {
-       $this->handleDisplay('There was a problem checking your upstream status. Please try again.');
-       echo PHP_EOL;
-     }
-     if (isset($assoc_args['update']) AND !empty($upstream->update_log)) {
-       $env = 'dev';
-       Terminus::confirm(sprintf("Are you sure you want to apply the upstream updates to %s-dev", $site->getName(), $env));
-       $response = $site->applyUpstreamUpdates($env);
-       if (@$response->id) {
-         $this->waitOnWorkflow('sites', $site->getId(), $response->id);
-       } else {
-         Terminus::success("Updates applied");
-       }
-     }
+    if (isset($assoc_args['update']) && !empty($upstream->update_log)) {
+      $env = 'dev';
+      $updatedb = (isset($assoc_args['updatedb']) && $assoc_args['updatedb']);
 
-   }
+      Terminus::confirm(sprintf("Are you sure you want to apply the upstream updates to %s-dev", $site->getName(), $env));
+      $workflow = $site->applyUpstreamUpdates($env, $updatedb);
+      $workflow->wait();
+      Terminus::success("Updates applied");
+    }
+  }
 
   /**
    * Pings a site to ensure it responds
@@ -1469,24 +1521,17 @@ class Site_Command extends Terminus_Command {
    * : Site to use
    *
    * [--env=<env>]
-   * : Specify environment, default = dev
+   * : Environment to be wiped
    */
-   public function wipe($args, $assoc_args) {
-     try {
-       $env = @$assoc_args['env'] ?: 'dev';
-       $site = SiteFactory::instance(Input::sitename($assoc_args));
-       $site_id = $site->getId();
-       $env = Input::env($assoc_args, 'env');
-       Terminus::line("Wiping %s %s", array($site_id, $env));
-       $resp = $site->environment($env)->wipe();
-       if ($resp) {
-         $this->waitOnWorkflow('sites', $site_id, $resp['data']->id);
-         Terminus::success("Successfully wiped %s -- %s", array($site->getName(),$env));
-       }
-    } catch(Exception $e) {
-      Terminus::error("%s",array($e->getMessage()));
-    }
-   }
+  public function wipe($args, $assoc_args) {
+    $site = SiteFactory::instance(Input::sitename($assoc_args));
+    $environment_id = Input::env($assoc_args, 'env');
+    Terminus::confirm(sprintf("Are you sure you want to wipe %s - %s?", $site->getName(), $environment_id));
+
+    $workflow = $site->environment($environment_id)->wipe();
+    $workflow->wait();
+    Terminus::success(sprintf("Successfully wiped %s - %s", $site->getName(), $environment_id));
+  }
 
    /**
     * Delete a site from pantheon

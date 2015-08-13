@@ -44,10 +44,7 @@ class Input {
    * @param [string] $message Prompt to STDOUT
    * @return [string] $env Name of environment to work on
    */
-  static public function environment($message) {
-    if(!$message) {
-      $message = "Specify a environment";
-    }
+  static public function environment($message = 'Specify an environment') {
     if(!$env || (array_search($env, $envs) === false)) {
       $env = \Terminus::menu($envs, null, $message);
       $env = $envs[$env];
@@ -130,7 +127,9 @@ class Input {
    * @param [string] $default Returned if arg and stdin fail in interactive
    * @return [string] ID of selected organization
   */
-  public static function orgid($args, $key, $default = null) {
+  public static function orgid($args, $key, $default = null, $options = array()) {
+    $allow_none = isset($options['allow_none']) ? $options['allow_none'] : true;
+
     $orglist = Input::orglist();
     $flip    = array_flip($orglist);
     if(isset($args[$key]) && array_key_exists($args[$key], $flip)) {
@@ -146,8 +145,19 @@ class Input {
       return $default;
     }
 
-    $orglist = Input::orglist();
-    $org     = \Terminus::menu($orglist, false, "Choose organization");
+    $orglist = Input::orglist(array('allow_none' => $allow_none));
+
+    // include the Org ID in the output menu
+    $orglist_with_id = array();
+    foreach ($orglist as $id => $name) {
+      if ($name == 'None') {
+        $orglist_with_id[$id] = $name;
+        continue;
+      }
+      $orglist_with_id[$id] = sprintf("%s (%s)", $name, $id);
+    }
+
+    $org = \Terminus::menu($orglist_with_id, false, "Choose organization");
     if($org == '-') {
       return $default;
     }
@@ -159,8 +169,14 @@ class Input {
    *
    * @return [array] List of organizations
   */
-  public static function orglist() {
-    $orgs = array('-' => 'None');
+  public static function orglist($options = array()) {
+    $orgs = array();
+
+    $allow_none = isset($options['allow_none']) ? $options['allow_none'] : true;
+    if ($allow_none) {
+      $orgs = array('-' => 'None');
+    }
+
     $user = new User;
     foreach($user->organizations() as $id => $org) {
       $orgs[$id] = $org->name;
@@ -186,6 +202,30 @@ class Input {
     }
     $org = \Terminus::menu($orglist, false, "Choose organization");
     return $orglist[$org];
+  }
+
+  /**
+   * Helper function to get role
+   *
+   * @param [array]  $assoc_args Argument array passed from commands
+   * @param [string] $message Prompt to STDOUT
+   * @return [string] $role Name of role
+   */
+  static public function role($assoc_args, $message = 'Select a role for this member') {
+    $roles = array('developer', 'team_member', 'admin');
+    if(
+      !isset($assoc_args['role'])
+      || !in_array(strtolower($assoc_args['role']), $roles)
+    ) {
+      $role = strtolower($roles[Input::menu(
+        $roles,
+        null,
+        'Select a role for the new member'
+      )]);
+    } else {
+      $role = $assoc_args['role'];
+    }
+    return $role;
   }
 
   /**

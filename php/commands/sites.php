@@ -37,6 +37,12 @@ class Sites_Command extends Terminus_Command {
    * Note: because of the size of this call, it is cached
    *   and also is the basis for loading individual sites by name
    *
+   * [--team]
+   * : filter sites you are a team member of
+   *
+   * [--org=<id>]
+   * : filter sites you can access via the organization
+   *
    * @subcommand list
    * @alias show
    */
@@ -44,11 +50,6 @@ class Sites_Command extends Terminus_Command {
     // Always fetch a fresh list of sites
     $this->sitesCache->rebuild();
     $cached_sites = $this->sitesCache->all();
-
-    if (count($cached_sites) == 0) {
-      Terminus::log("You have no sites.");
-      exit(0);
-    }
 
     $rows = array_map(function($cached_site) {
       return array(
@@ -58,12 +59,31 @@ class Sites_Command extends Terminus_Command {
         'framework' => $cached_site['framework'],
         'memberships' => array_map(function($membership) {
           return $membership['name'];
-        }, $cached_site['memberships'])
+        }, array_values($cached_site['memberships']))
       );
-    }, $cached_sites);
+    }, array_values($cached_sites));
+
+    if (isset($assoc_args['team'])) {
+      $rows = array_filter($rows, function($site) {
+        return in_array('Team', $site['memberships']);
+      });
+    }
+
+    if (isset($assoc_args['org'])) {
+      $org_id = $assoc_args['org'];
+
+      $rows = array_filter($rows, function($site) use ($org_id) {
+        $org_ids = array_keys($site['memberships']);
+        return in_array($org_id, $org_ids);
+      });
+    }
+
+    if (count($rows) == 0) {
+      Terminus::log("You have no sites.");
+      exit(0);
+    }
 
     $this->handleDisplay($rows);
-    return $rows;
   }
 
 
@@ -87,7 +107,7 @@ class Sites_Command extends Terminus_Command {
    * [--import=<url>]
    * : A url to import a valid archive
    *
-   * [--org=<org>]
+   * [--org=<id>]
    * : UUID of organization into which to add this site
    *
    */
@@ -181,7 +201,7 @@ class Sites_Command extends Terminus_Command {
   * [--label=<label>]
   * : Label for the site
   *
-  * [--org=<org>]
+  * [--org=<id>]
   * : UUID of organization into which to add this site
   *
   * @subcommand create-from-import
@@ -220,7 +240,8 @@ class Sites_Command extends Terminus_Command {
    * : print aliases to screen
    *
    * [--location=<location>]
-   * : specify the location of the alias file, default it ~/.drush/pantheon.drushrc.php
+   * : Specify the the full path, including the filename, to the alias file you wish to create.
+   *   Without this option a default of '~/.drush/pantheon.drushrc.php' will be used.
    *
    */
   public function aliases($args, $assoc_args) {
@@ -228,15 +249,28 @@ class Sites_Command extends Terminus_Command {
     $print = Input::optional('print', $assoc_args, false);
     $json = \Terminus::get_config('json');
     $location = Input::optional('location', $assoc_args, getenv("HOME").'/.drush/pantheon.aliases.drushrc.php');
-    $message = "Pantheon aliases updated.";
-    if (!file_exists($location)) {
-      $message = "Pantheon aliases created.";
+
+    // Cannot provide just a directory
+    if (is_dir($location)) {
+      \Terminus::error("Please provide a full path with filename, e.g. %s/pantheon.aliases.drushrc.php", $location);
+      exit(1);
     }
+
+    $file_exists = file_exists($location);
+
+    // Create the directory if it doesn't yet exist
+    $dirname = dirname($location);
+    if (!is_dir($dirname)) {
+      mkdir($dirname, 0700, true);
+    }
+
     $content = $user->getAliases();
     $h = fopen($location, 'w+');
     fwrite($h, $content);
     fclose($h);
-    chmod($location, 0777);
+    chmod($location, 0700);
+
+    $message = $file_exists ? 'Pantheon aliases updated' : 'Pantheon aliases created';
     Logger::coloredOutput("%2%K$message%n");
 
     if ($json) {
@@ -268,6 +302,8 @@ class Sites_Command extends Terminus_Command {
  * @subcommand mass-update
  */
   public function mass_update($args, $assoc_args) {
+    // Ensure the sitesCache is up to date
+    $this->sitesCache->rebuild();
     $sites_cache = $this->sitesCache->all();
 
     $env = 'dev';
@@ -281,6 +317,7 @@ class Sites_Command extends Terminus_Command {
 
     foreach($sites_cache as $site_cache ) {
       $site = new Site($site_cache['id']);
+      $site->fetch();
       $updates = $site->getUpstreamUpdates();
       if (!isset($updates->behind)) {
         // No updates, go back to start.
@@ -297,8 +334,7 @@ class Sites_Command extends Terminus_Command {
 
       if( $updates->behind > 0 ) {
         $data[$site->getName()] = array('site'=> $site->getName(), 'status' => "Needs update");
-        $noupdatedb = Input::optional($assoc_args, 'updatedb', false);
-        $update = $noupdatedb ? false : true;
+        $updatedb = !Input::optional($assoc_args, 'updatedb', false);
         $xoption = Input::optional($assoc_args, 'xoption', 'theirs');
         if (!$report) {
           $confirmed = Input::yesno("Apply upstream updates to %s ( run update.php:%s, xoption:%s ) ", array($site->getName(), var_export($update,1), var_export($xoption,1)));
@@ -312,7 +348,7 @@ class Sites_Command extends Terminus_Command {
             Terminus::success("Backup of ".$site->getName()." created.");
             Terminus::line('Updating '.$site->getName().'.');
             // Apply the update, failure here would trigger a guzzle exception so no need to validate success.
-            $response = $site->applyUpstreamUpdates($env, $update, $xoption);
+            $response = $site->applyUpstreamUpdates($env, $updatedb, $xoption);
             $data[$site->getName()]['status'] = 'Updated';
             Terminus::success($site->getName().' is updated.');
           } else {

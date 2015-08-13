@@ -44,9 +44,16 @@ class Environment {
     }
   }
 
+  /**
+   * Deletes all content (files and database) from the Environment
+   *
+   * @param $args
+  **/
   public function wipe() {
-    $path = sprintf("environments/%s/wipe", $this->name);
-    return \Terminus_Command::request('sites', $this->site->getId(), $path, 'POST');
+    $workflow = $this->site->workflows->create('wipe', array(
+      'environment' => $this->id
+    ));
+    return $workflow;
   }
 
   public function diffstat() {
@@ -111,7 +118,7 @@ class Environment {
    * @param bool $latest_only
    * @return array
    */
-  public function backups($element = null, $latest_only = false) {
+  public function backups($element = null) {
     if (null === $this->backups) {
       $path = sprintf("environments/%s/backups/catalog", $this->name);
       $response = \Terminus_Command::request('sites', $this->site->getId(), $path, 'GET');
@@ -132,9 +139,7 @@ class Environment {
         }
       }
     }
-    if ($latest_only) {
-      return array(array_pop($backups));
-    }
+
     return $backups;
   }
 
@@ -388,7 +393,7 @@ class Environment {
   }
 
   /**
-   * Deploys the Test or Live environment)
+   * Deploys the Test or Live environment
    *
    * @param [array] $params Parameters for the deploy workflow
    *
