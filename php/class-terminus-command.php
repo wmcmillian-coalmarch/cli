@@ -55,12 +55,16 @@ abstract class Terminus_Command {
       $cache = Terminus::get_cache();
 
       if (!in_array($realm,array('login','user'))) {
-        if (Session::getValue('token_type') == 'X-Pantheon-Session') {
-          $options['cookies'] = array('X-Pantheon-Session' => Session::getValue('session'));
-        }
-        if (Session::getValue('token_type') == 'Bearer') {
-          $options['headers']['Bearer'] = Session::getValue('id_token');
-        }
+        // @TODO: to avoid having to modify Hermes we send the JWT as a session cookie.
+//        if (Session::getValue('token_type') == 'X-Pantheon-Session') {
+//          $options['cookies'] = array('X-Pantheon-Session' => Session::getValue('session'));
+//        }
+//        if (Session::getValue('token_type') == 'Bearer') {
+//          $options['headers']['Bearer'] = Session::getValue('id_token');
+//        }
+
+        $options['cookies'] = array('X-Pantheon-Session' => Session::getValue('session'));
+
         $options['verify'] = false;
       }
       $url = Endpoint::get(array('realm'=>$realm, 'uuid'=>$uuid, 'path'=>$path));
