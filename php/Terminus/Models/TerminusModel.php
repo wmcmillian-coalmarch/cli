@@ -17,6 +17,9 @@ abstract class TerminusModel {
    * @return [TerminusModel] $this
    */
   public function __construct($attributes, $options = array()) {
+    if(is_object($options)) {
+      $options = get_object_vars($options);
+    }
     foreach ($options as $var_name => $value) {
       $this->$var_name = $value;
     }
